@@ -1,83 +1,86 @@
-# Trustos — frontend interface preview
+# Trustos — frontend, authentication migration preparation
 
-A responsive financial-security product interface using the official LinuxBoss logo supplied for this project. The UI covers the six approved phases and **stops before production integrations**.
+A responsive React/Vite interface using the supplied official LinuxBoss logo. The legacy development authentication implementation has been removed. **No authentication provider is connected in this phase.** Supabase Auth is planned for a separate phase; it has **not** been installed, configured, or implemented.
 
 ## Run it
 
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-Open the address printed by Vite (by default `http://localhost:5173`). The development server serves the UI **and** its same-origin, in-memory local auth API. For a built preview, use `npm run build && npm run start` (default port `4173`; set `PORT` to override).
+Open the Vite address (usually `http://localhost:5173`). For a built static preview, run `npm run build && npm run start` (default port `4173`, override with `PORT`). Neither server creates accounts, exposes authentication endpoints, or delivers email.
 
-### Try the journey
-
-1. On the landing page, select **Start recovery**.
-2. Create a **local test account** with a test email address and a password you do not use elsewhere. Accept the preview terms explicitly.
-3. On verification, use the six-digit **local development code displayed on screen**. No email is sent.
-4. The authenticated workspace contains **Overview**, **Recovery**, **Trustos AI**, **Verification**, and **Account**.
-5. Complete the recovery **walkthrough** to see the Identify → Recover (demo) → Verify states. Completion **does not recover funds or access a wallet**.
-6. Switch between light and dark mode in the header or account settings. The setting persists in this browser.
-
-A **Continue with Google** button is present as a future integration entry point. It opens an explicit “not connected” notice rather than pretending to authenticate.
-
-## Implemented phases
-
-| Phase | Where |
-| --- | --- |
-| Landing page, principles, process, privacy, verification, Core | `/`, `/security`, `/privacy`, `/terms` |
-| Login / sign up / email verification / password UI | `/login`, `/signup`, `/verify`, `/forgot-password`, `/reset-password` |
-| Local authentication API | `server/localAuth.mjs` mounted under `/api/auth/*` |
-| Protected dashboard | `/app` |
-| Authenticated Trustos AI interface | `/app/assistant` (local scripted answers only) |
-| Guided recovery and review | `/app/recovery`, `/app/verification` (illustrative walkthrough only) |
-
-The interactive Trustos Core on the landing page is a **conceptual process model**, not a live recovery status indicator.
-
-## Boundaries — important
-
-- **No production auth or security guarantee.** This local API holds accounts, salted password hashes, codes, and sessions **in server memory**. Restarting the server clears them. The HTTP-only demo session cookie and on-screen codes are for UI testing, not production security. Never reuse a real password.
-- **No email is delivered.** Verification and reset codes are returned by the development API and deliberately shown on screen.
-- **No Google OAuth, Supabase, recovery engine, chain requests, live financial transactions, or production AI model** is connected.
-- **Do not enter private keys, seed/recovery phrases, or wallet passwords.** The recovery demo only asks for issue categories. The guide blocks obvious secret-like strings, but that check is not guaranteed; guide messages remain in page memory and disappear on refresh.
-- The only client-side persisted preferences are **theme** and **non-sensitive local walkthrough event labels** (per preview user). No illustrative “success” represents an actual asset recovery or verification.
-
-## Architecture
+## Current authentication boundary
 
 ```text
-src/pages/*  →  src/context/AuthContext.tsx
-                         ↓
-                 src/services/authService.ts   (replaceable provider adapter)
-                         ↓
-                 /api/auth/*  →  server/localAuth.mjs  (temporary development API)
+React UI → AuthContext → authService → NOT CONNECTED
 ```
 
-The pages do not implement authentication directly. A future approved integration can replace the auth service/provider while preserving the page-level contract. Guide responses are isolated in `src/services/guideService.ts`, and local activity in `src/services/demoActivity.ts`.
+`src/context/AuthContext.tsx` and `src/services/authService.ts` remain the application’s integration seam. The old account/session provider and its development code displays have been removed. Until a separately approved provider is implemented:
 
-The supplied original logo is preserved at `public/brand/linuxboss-source.png`. `linuxboss-mark.webp` is a faithful crop of the supplied **LB dragon mark** for navigation and assistant avatars; the favicon comes from that same mark. Fonts are bundled locally in `public/fonts`.
+- A session lookup resolves to **no signed-in user** through the context’s existing error handling. The auth-service operations reject with an explicit `AUTH_NOT_CONFIGURED` error **without making a network request**; they do not mint users, sessions, codes, or cookies.
+- Login, signup, account-confirmation, and password-reset screens retain their routes and layout, but visibly state that authentication is unavailable. The forms cannot create an account, sign in, confirm email ownership, or reset a password. No account-confirmation or reset code is generated, displayed, or sent by this application. Do not enter a real or reused password into these unconnected screens.
+- Protected routes continue to redirect unauthenticated visitors to `/login`, preserving a selected service in the return URL. **The dashboard, Recovery walkthrough, Trustos AI guide, Verification checklist, and Account screen cannot currently be entered.** There is no development bypass or substitute login.
+- Google sign-in remains an unavailable UI option and does not authenticate anyone. No Supabase client, variables, OAuth, email-confirmation flow, alternative auth provider, or fake replacement has been added.
 
-### Development API contract
+The next auth phase must choose and implement the real provider, session lifecycle, signup/login/error handling, actual confirmation or recovery flows, and privacy/security controls. The existing UI contracts may need adjustment to match the chosen provider; none of those behaviors are simulated here.
 
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/api/auth/session` | Current development session |
-| `POST` | `/api/auth/signup` | Create preview account; returns on-screen `devCode` |
-| `POST` | `/api/auth/login` | Log in; flags pending verification |
-| `POST` | `/api/auth/verify` | Verify six-digit local code; create session |
-| `POST` | `/api/auth/resend` | Rotate local code; 45-second cooldown |
-| `POST` | `/api/auth/password/request` | Create on-screen reset code |
-| `POST` | `/api/auth/password/reset` | Reset local password; revoke old sessions |
-| `POST` | `/api/auth/logout` | End current development session |
+## Services and fee boundary
 
-## Build & smoke test
+| Free Support — no cost | Separate paid service |
+| --- | --- |
+| Access Recovery | Actual Wallet Recovery |
+| Device / Backup Recovery | **10% fee only when Trustos successfully performs actual wallet recovery.** |
+| Security Incident Recovery | No upfront charge; no charge for any Free Support service. |
+| Transaction Investigation | |
+| Transfer / Asset Recovery Assessment | |
+| Scam / Fraud Assistance | |
+
+The public landing catalog is at `/#services`. The same six-plus-one model remains in the protected dashboard and the service selector at `/app/recovery` for when authentication is available. Public card links retain the selected service through signup/login, but **cannot open the workspace while authentication is disconnected**. No listed service is executed by this frontend: the Recovery page is a clearly labelled Identify → Recover → Verify **walkthrough**, not a recovery engine or request submission. It does not access wallets, recover assets, verify transactions, or collect a fee. Completing it records only a non-sensitive browser event, not a result or a review invitation.
+
+The dashboard’s **Verify Transaction** action, when accessible after authentication is connected, is only an accessible external link to `https://trustos.wasmer.app` in a new tab. This frontend neither inspects nor integrates with that site.
+
+The landing Core is a conceptual process model, not a live status indicator. Light/dark theme selection persists and initially follows the device’s preference. The landing sections, branding, and Community & Open Work section are retained.
+
+## Interface map
+
+| Area | Route / status |
+| --- | --- |
+| Landing, service catalog, principles, process, privacy, verification, Core, community | `/` — public |
+| Security, privacy, terms | `/security`, `/privacy`, `/terms` — public |
+| Account UI shells | `/login`, `/signup`, `/verify`, `/forgot-password`, `/reset-password` — visible, no provider |
+| Workspace and service catalog | `/app` — protected, currently inaccessible |
+| Prepared Trustos AI guide | `/app/assistant` — protected, currently inaccessible; no external AI API |
+| Guided recovery and verification checklist | `/app/recovery`, `/app/verification` — protected, currently inaccessible |
+| Existing external transaction-verification destination | `https://trustos.wasmer.app` — link only, not an integration |
+
+`src/services/serviceCatalog.ts` is the shared service and fee source; `src/components/ServiceCards.tsx` renders free cards and the distinct paid card. `src/services/guideService.ts` holds prepared local answers behind an asynchronous adapter for a separately approved future integration; it calls no AI provider. `src/services/demoActivity.ts` stores only browser-local, non-sensitive walkthrough labels, not recovery progress or credentials.
+
+## Community, source & contact
+
+Community & Open Work stays after the verification section and before the final CTA at `/#community`:
+
+- **No community reviews yet.** No testimonials, names, ratings, success stories, or placeholder reviews are invented. The disconnected review adapter publishes nothing.
+- Future publication must follow **actual confirmed recovery → explicit user consent and submission → moderation → publication**. The optional review invitation component is not mounted. The backend, when separately approved, must enforce every condition and redact sensitive material.
+- Source: <https://github.com/yzigzag26-lab/Trustos-recover-Frontend>; issues: <https://github.com/yzigzag26-lab/Trustos-recover-Frontend/issues>. Open source is not a security audit.
+- Contact: [Email us](mailto:yzigzag26@gmail.com) or [Telegram](https://t.me/TrustOSLLC).
+
+## Privacy and implementation limits
+
+- Never enter a seed/recovery phrase, private key, BIP39 passphrase, wallet password, or real account password into unconnected forms. The guide’s obvious-secret detection is best-effort, not a guarantee; no AI provider or recovery engine receives the messages in this build.
+- Sensitive on-device recovery computation is a **future design intent where architecture permits**, not an implemented or universal privacy guarantee.
+- There is no production authentication, email, OAuth, Supabase integration, key handling, blockchain request, payment/checkout, database, live transaction, or review backend. The static server serves UI assets only; it does not provide an auth API.
+- The existing auth UI and `AuthContext` abstraction have been kept. No fake users, browser-storage auth, test accounts, alternative provider, or hidden sign-in path have been introduced. Theme preference and non-sensitive activity labels are the only browser data this interface intentionally persists; older browser-local activity may remain from an earlier preview.
+
+The original logo source remains in `public/brand/linuxboss-source.png`; `linuxboss-mark.webp` is a faithful navigation/avatar crop, and the favicon uses the same mark. Fonts are bundled locally in `public/fonts`.
+
+## Build and smoke test
 
 ```bash
 npm run build
-npx playwright install chromium   # browser install needed once for smoke testing
+npx playwright install chromium   # one-time browser install if not already available
 npm run test:smoke
 ```
 
-The smoke test starts its own development server and covers the interactive Core, theme persistence, auth and verification, protected routing, recovery states, local guide, secret guard, mobile overflow checks, logout, and axe-core WCAG AA audits of major dark-theme screens.
-
-**Current boundary:** these six UI phases only. Production integrations require a separate review and explicit approval.
+Chromium system libraries may also require `npx playwright install-deps chromium` in minimal Linux environments. The smoke test checks the public six-plus-one catalog, honest fee/review copy, source/contact links, Core, system preference and persistent theme, public and auth-shell layouts, protected-route redirects, lack of issued codes or auth network calls, truthful unavailable-provider errors, mobile/tablet overflow, and sampled axe-core WCAG AA audits. It also tests the local catalog/guide contracts without forging an authenticated session. **Authenticated dashboard, Recovery, guide, and account browser flows cannot run without a real provider and must be revalidated in the next phase.**
